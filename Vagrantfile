@@ -15,7 +15,7 @@ Vagrant.configure("2") do |config|
    config.vm.box = "dummy"
    config.vm.provider 'aws' do |aws, override|
       aws.access_key_id =  "AKIAYTZD43YGJTQRTXKJ"
-      aws.secret_access_key = "y1aYrZTZyO9CtME3z6CqaN0az3vFBwYkKXLUaKMz"
+      aws.secret_access_key = ""
       aws.keypair_name = 'macoskeypair'
       aws.ami = "ami-01d272181e2844951"
       #aws.ami = "ami-0f6b4418414fb1c01"
