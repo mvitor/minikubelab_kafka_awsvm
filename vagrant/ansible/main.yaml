@@ -1,0 +1,78 @@
+# Setting host
+- hosts: localhost
+  gather_facts: false
+  vars:
+    ansible_python_interpreter: '{{ ansible_playbook_python }}'
+    image_name: hello-go
+    image_tag: latest
+    cpu: 4
+    memory: 8192
+    replicas: 1
+# Pre-Tasks to validate if Minikube is running
+  pre_tasks:
+    - name: Set Minikube's cpu
+      command: minikube config set cpus {{ cpu }}
+    - name: Set Minikube's memory
+      command: minikube config set memory {{ memory }}
+    - name: Check Minikube's status.
+      command: minikube status
+      register: minikube_status
+      changed_when: false
+      ignore_errors: true
+    # Otherwise will start minikube
+  tasks: 
+    - name: Start service docker, if not started
+      ansible.builtin.service:
+        name: docker
+        state: started
+    - name: Start Minikube if it's not running.
+      command: minikube start --ports=30300:30300,30900:30900,30090:30090
+      until: "minikube_status.stdout and 'Running' in minikube_status.stdout"
+    - name: Install Git
+      become: true
+      yum:
+        name: git
+        state: latest
+      
+    - name: Run Install Helm
+      become: true
+      shell: curl https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3 | bash
+      args:
+        executable: /bin/bash            
+
+    - name: Create namespace kafka
+      shell: kubectl create namespace kafka
+      args:
+        executable: /bin/bash  
+    - name: Create CustomResourceDefinition
+      become: no
+      shell: kubectl create -f https://strimzi.io/install/latest?namespace=kafka -n kafka
+      args:
+        executable: /bin/bash 
+    - name: kafka-persistent-single.yaml
+      become: no
+      shell:
+          kubectl apply -f /vagrant/kafka/kafka-persistent-single.yaml -n kafka
+      args:
+        executable: /bin/bash  
+    - name: Wait for Kafka Brokers
+      wait_for:
+      port: 30094
+      delay: 120
+    - name: Run install Kafkadrop
+      shell: |
+        set timeout 300
+        git clone https://github.com/obsidiandynamics/kafdrop
+        cd kafdrop/
+        helm upgrade -i kafdrop chart --set image.tag=3.27.0 \
+        --set kafka.brokerConnect=marcio-cluster-kafka-0.marcio-cluster-kafka-brokers.kafka.svc:9092 \
+        --set server.servlet.contextPath="/" \
+        --set jvm.opts="-Xms32M -Xmx64M"
+        exit 0
+      args:
+        executable: /bin/bash
+    - name: Wait for Kafkadrop 
+      wait_for:
+      port: 30900
+      delay: 120
+

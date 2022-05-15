@@ -1,0 +1,16 @@
+# Setting host
+- hosts: localhost
+  gather_facts: false
+  tasks: 
+       - name: Configuring Producer Kafka
+         shell: kubectl apply -f /vagrant/kafka_python/producer.yaml
+         args:
+            executable: /bin/bash 
+       - name: Wait for Producer Python     
+         wait_for:
+           timeout: 120  
+         delegate_to: localhost           
+       - name: Configuring Consumer Kafka
+         shell: kubectl apply -f /vagrant/kafka_python/consumer.yaml
+         args:
+            executable: /bin/bash

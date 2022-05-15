@@ -1,0 +1,95 @@
+#
+# Configure
+#
+- hosts: localhost
+  become: no
+  connection: local
+
+  tasks:
+       - name: Add prometheus-community's chart repository.
+         kubernetes.core.helm_repository:
+           name: prometheus-community 
+           repo_url: "https://prometheus-community.github.io/helm-charts"
+
+       - name: Add Bitnami's chart repository.
+         kubernetes.core.helm_repository:
+           name: bitnami
+           repo_url: "https://charts.bitnami.com/bitnami"
+
+       - name: Add Grafana repository..
+         kubernetes.core.helm_repository:
+           name: grafana
+           repo_url: "https://grafana.github.io/helm-charts"
+
+       - name: Create namespace Monitoring
+         become: no
+         shell: kubectl create namespace monitoring  
+         args:
+            executable: /bin/bash
+       - name: Create Prometheus
+         become: no
+         shell: helm install prometheus prometheus-community/kube-prometheus-stack --set grafana.service.type=NodePort --set prometheus.prometheusSpec.podMonitorSelectorNilUsesHelmValues=false --namespace monitoring
+         args:
+            executable: /bin/bash
+       - name: Configuring Prometheus 1 - 4 = create secret
+         become: no
+         shell: kubectl create secret generic additional-scrape-configs --from-file=/vagrant/prometheus/prometheus-additional.yaml -n monitoring
+         args:
+            executable: /bin/bash
+       - name: Configuring Prometheus 2 - 4 = pod-monitor
+         become: no
+         shell: kubectl apply -f /vagrant/prometheus/strimzi-pod-monitor.yaml -n monitoring
+         args:
+            executable: /bin/bash     
+
+       - name: Pause for 2 minutes to build
+         pause:
+           minutes: 1
+
+       - name: Configuring Prometheus 3 - 4 = prometheus-rules
+         become: no
+         shell: kubectl apply -f /vagrant/prometheus/prometheus-rules.yaml -n monitoring
+         args:
+            executable: /bin/bash  
+
+       - name: Configuring Prometheus 4 - 4 = prometheus.yaml
+         shell: kubectl apply -f /vagrant/prometheus/prometheus.yaml -n monitoring
+         become: no
+         args:
+            executable: /bin/bash 
+       - name: Wait for Prometheus 
+         wait_for:
+         port: 30090
+         delay: 60            
+       - name: Configuring Grafana
+         become: no
+         shell: helm install grafana -f /vagrant/grafana/grafana.yaml grafana/grafana -n monitoring
+         args:
+            executable: /bin/bash
+       - name: Wait for Grafana 
+         wait_for:
+         port: 30300
+         delay: 60            
+       - name: Configuring Producer Kafka
+         shell: kubectl apply -f /vagrant/kafka_python/producer.yaml
+         args:
+            executable: /bin/bash 
+       - name: Wait for Producer Python     
+         wait_for:
+           timeout: 60  
+         delegate_to: localhost           
+       - name: Configuring Consumer Kafka
+         shell: kubectl apply -f /vagrant/kafka_python/consumer.yaml
+         args:
+            executable: /bin/bash
+       - name: display post install message
+         debug: 
+           msg: 
+             - "Things left to do. In your host machine go:"
+             - "http://127.0.0.1:30900 - To open Kafkadrop and see topic and messages"
+             - "http://127.0.0.1:30090 - Prometheus"
+             - "http://127.0.0.1:30300 - Granafa Dashboards"
+             - "Brkoker Kafka: 127.0.0.1:30094"
+             - "https://github.com/mordp1/lab_kafka"
+             - "To see all pods : kubectl get pods --all-namespaces"
+             - "Best Regards"
